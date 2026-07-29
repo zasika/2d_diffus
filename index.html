@@ -1,1 +1,960 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCA vs PSA 2D 수분 확산 시뮬레이터 (파라메트릭 조건)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="p-2.5 bg-cyan-500/10 text-cyan-400 rounded-xl border border-cyan-500/20">
+                <i data-lucide="droplets" class="w-6 h-6 animate-pulse"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                    OCA vs PSA 2D 수분 확산 시뮬레이터
+                </h1>
+                <p class="text-xs text-slate-400">상하 Glass 차단 4면 측면 침투 모델 &middot; 온습도 및 점착층/시편 치수 가변 모델</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+            <div class="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5">
+                <i data-lucide="thermometer-sun" class="w-4 h-4"></i>
+                <span id="badgeEnv">시험 조건: 85°C / 85% RH</span>
+            </div>
+            <div id="badgeSpecimen" class="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-300 font-mono">
+                두께: 100 &mu;m | 크기: 10x10 mm
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Control Panel (4 Cols) -->
+        <section class="lg:col-span-4 flex flex-col gap-5">
+            
+            <!-- 1. Specimen & Adhesive Settings -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
+                <h2 class="text-sm font-bold text-slate-200 mb-4 flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                    <i data-lucide="sliders" class="w-4 h-4 text-cyan-400"></i>
+                    1. 시편 및 점착제 가변 사양 설정
+                </h2>
+                
+                <div class="space-y-4 text-xs">
+                    <!-- OCA WVTR Input -->
+                    <div class="bg-slate-950 p-3 rounded-lg border border-slate-800">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="font-bold text-cyan-400 flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                                OCA 기준 투습율 (WVTR)
+                            </span>
+                            <span id="txtOcaWvtr" class="font-bold code-font text-cyan-300">700 g/m²·day</span>
+                        </div>
+                        <input id="sliderOcaWvtr" type="range" min="100" max="2000" step="50" value="700" class="w-full accent-cyan-400 bg-slate-900 rounded-lg appearance-none h-1.5 cursor-pointer">
+                        <p class="text-[10px] text-slate-500 mt-1">8585 조건, 100&mu;m 필름 기준 수분 차단성</p>
+                    </div>
+
+                    <!-- PSA WVTR Input -->
+                    <div class="bg-slate-950 p-3 rounded-lg border border-slate-800">
+                        <div class="flex justify-between items-center mb-1.5">
+                            <span class="font-bold text-rose-400 flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+                                PSA 기준 투습율 (WVTR)
+                            </span>
+                            <span id="txtPsaWvtr" class="font-bold code-font text-rose-300">3500 g/m²·day</span>
+                        </div>
+                        <input id="sliderPsaWvtr" type="range" min="1000" max="8000" step="100" value="3500" class="w-full accent-rose-400 bg-slate-900 rounded-lg appearance-none h-1.5 cursor-pointer">
+                        <p class="text-[10px] text-slate-500 mt-1">8585 조건, 100&mu;m 필름 기준 수분 차단성</p>
+                    </div>
+
+                    <!-- Specimen Size L (Up to 100x100 mm) -->
+                    <div>
+                        <div class="flex justify-between text-slate-300 mb-1">
+                            <span class="font-semibold">시편 가로/세로 크기 (L x L)</span>
+                            <span id="txtSpecimenSize" class="text-amber-400 font-bold code-font">10 mm x 10 mm</span>
+                        </div>
+                        <input id="sliderSpecimenSize" type="range" min="2" max="100" step="1" value="10" class="w-full accent-amber-400 bg-slate-950 rounded-lg appearance-none h-1.5 cursor-pointer">
+                        <div class="flex justify-between text-[9px] text-slate-500 mt-0.5">
+                            <span>2 mm</span>
+                            <span>10 mm</span>
+                            <span>50 mm</span>
+                            <span>100 mm (대면적)</span>
+                        </div>
+                    </div>
+
+                    <!-- Adhesive Thickness Variable -->
+                    <div>
+                        <div class="flex justify-between text-slate-300 mb-1">
+                            <span class="font-semibold">점착제 두께 (d)</span>
+                            <span id="txtThickness" class="text-emerald-400 font-bold code-font">100 &mu;m</span>
+                        </div>
+                        <input id="sliderThickness" type="range" min="10" max="500" step="5" value="100" class="w-full accent-emerald-400 bg-slate-950 rounded-lg appearance-none h-1.5 cursor-pointer">
+                        <div class="flex justify-between text-[9px] text-slate-500 mt-0.5">
+                            <span>10 &mu;m (박막)</span>
+                            <span>100 &mu;m (표준)</span>
+                            <span>250 &mu;m</span>
+                            <span>500 &mu;m (후막)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Environmental Condition Inputs -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
+                <h2 class="text-sm font-bold text-slate-200 mb-4 flex items-center gap-2 border-b border-slate-800 pb-2.5">
+                    <i data-lucide="thermometer-sun" class="w-4 h-4 text-amber-400"></i>
+                    2. 환경 조건 개별 설정 (온도 / 습도)
+                </h2>
+                <div class="space-y-4 text-xs">
+                    <!-- Temperature Input -->
+                    <div>
+                        <div class="flex justify-between text-slate-300 mb-1">
+                            <span class="font-semibold">시험 온도 (Temperature)</span>
+                            <span id="txtTemp" class="text-amber-400 font-bold code-font">85 °C</span>
+                        </div>
+                        <input id="sliderTemp" type="range" min="20" max="95" step="1" value="85" class="w-full accent-amber-400 bg-slate-950 rounded-lg appearance-none h-1.5 cursor-pointer">
+                        <div class="flex justify-between text-[9px] text-slate-500 mt-0.5">
+                            <span>20°C (상온)</span>
+                            <span>60°C</span>
+                            <span>85°C (고온신뢰성)</span>
+                            <span>95°C</span>
+                        </div>
+                    </div>
+
+                    <!-- Relative Humidity Input -->
+                    <div>
+                        <div class="flex justify-between text-slate-300 mb-1">
+                            <span class="font-semibold">상대 습도 (Humidity)</span>
+                            <span id="txtHumidity" class="text-sky-400 font-bold code-font">85 % RH</span>
+                        </div>
+                        <input id="sliderHumidity" type="range" min="10" max="100" step="5" value="85" class="w-full accent-sky-400 bg-slate-950 rounded-lg appearance-none h-1.5 cursor-pointer">
+                        <div class="flex justify-between text-[9px] text-slate-500 mt-0.5">
+                            <span>10% (건조)</span>
+                            <span>50%</span>
+                            <span>85% (고습)</span>
+                            <span>100% (포화)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Indicators Quick Comparison -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+                <h3 class="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">현재 시간 수분 침투 요약</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-slate-950 p-3 rounded-lg border border-cyan-500/30">
+                        <span class="text-[10px] text-cyan-400 font-bold block">OCA</span>
+                        <div class="mt-1">
+                            <span class="text-[10px] text-slate-400">중앙 농도: </span>
+                            <span id="statOcaCenter" class="text-base font-bold code-font text-white">0.0%</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400">침투 깊이: </span>
+                            <span id="statOcaDepth" class="text-sm font-bold code-font text-cyan-300">0.00 mm</span>
+                        </div>
+                    </div>
+                    <div class="bg-slate-950 p-3 rounded-lg border border-rose-500/30">
+                        <span class="text-[10px] text-rose-400 font-bold block">PSA</span>
+                        <div class="mt-1">
+                            <span class="text-[10px] text-slate-400">중앙 농도: </span>
+                            <span id="statPsaCenter" class="text-base font-bold code-font text-white">0.0%</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400">침투 깊이: </span>
+                            <span id="statPsaDepth" class="text-sm font-bold code-font text-rose-300">0.00 mm</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Right Main Viewport (8 Cols) -->
+        <section class="lg:col-span-8 flex flex-col gap-5">
+            
+            <!-- Timeline Player Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+                <div class="flex flex-wrap justify-between items-center gap-3">
+                    <div class="flex items-center gap-3">
+                        <button id="btnPlay" class="w-10 h-10 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center hover:bg-cyan-400 transition-colors shadow-lg shadow-cyan-500/20">
+                            <i data-lucide="play" class="w-5 h-5 fill-slate-950"></i>
+                        </button>
+                        <div>
+                            <span class="text-[10px] uppercase tracking-wider text-slate-500 block font-bold">신뢰성 환경 노출 시간</span>
+                            <span id="txtSimTime" class="text-lg font-black text-cyan-300 code-font leading-none">0.0 시간 (0.0 일차)</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                            <button id="btnSpeed1" class="px-2 py-1 rounded font-bold bg-slate-800 text-white">1x</button>
+                            <button id="btnSpeed10" class="px-2 py-1 rounded font-bold text-slate-400 hover:text-white">10x</button>
+                            <button id="btnSpeed50" class="px-2 py-1 rounded font-bold text-slate-400 hover:text-white">50x</button>
+                            <button id="btnSpeed200" class="px-2 py-1 rounded font-bold text-slate-400 hover:text-white">200x</button>
+                        </div>
+                        <button id="btnReset" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-800 hover:bg-slate-800 transition-all flex items-center gap-1.5 text-slate-300">
+                            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> 리셋
+                        </button>
+                    </div>
+                </div>
+                <!-- Timeline Slider (Up to 1000 hours) -->
+                <div class="relative mt-3">
+                    <input id="sliderSimTime" type="range" min="0" max="1000" step="1" value="0" class="w-full accent-cyan-400 bg-slate-950 rounded-lg appearance-none h-2 cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-slate-500 mt-1 code-font">
+                        <span>0h (초기)</span>
+                        <span>240h (10일)</span>
+                        <span>500h (20.8일)</span>
+                        <span>750h (31.25일)</span>
+                        <span>1000h (41.7일)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dual 2D Canvas Comparison Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                <!-- OCA Canvas View -->
+                <div class="bg-slate-900 border border-cyan-500/30 rounded-xl p-4 shadow-xl flex flex-col items-center relative">
+                    <div class="w-full flex justify-between items-center mb-2.5">
+                        <span class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                            OCA 2D 수분 확산 맵
+                        </span>
+                        <span id="txtD_OCA" class="text-[10px] bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 px-2 py-0.5 rounded code-font">D ≈ 0.045 mm²/h</span>
+                    </div>
+                    
+                    <div class="relative bg-slate-950 p-2 rounded-lg border border-slate-800 w-full flex justify-center items-center">
+                        <canvas id="canvasOCA" width="220" height="220" class="cursor-crosshair rounded border border-slate-800"></canvas>
+                        <!-- Glass Top/Bottom Seal Badges -->
+                        <div class="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-slate-700 text-[8px] text-slate-400 px-2 py-0.5 rounded shadow">
+                            [상부 Glass 차단]
+                        </div>
+                        <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-slate-700 text-[8px] text-slate-400 px-2 py-0.5 rounded shadow">
+                            [하부 Glass 차단]
+                        </div>
+                    </div>
+                    <div id="tooltipOCA" class="text-[10px] text-slate-300 mt-2 h-4 code-font text-center">
+                        마우스를 올리면 좌표별 농도가 표시됩니다.
+                    </div>
+                </div>
+
+                <!-- PSA Canvas View -->
+                <div class="bg-slate-900 border border-rose-500/30 rounded-xl p-4 shadow-xl flex flex-col items-center relative">
+                    <div class="w-full flex justify-between items-center mb-2.5">
+                        <span class="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-rose-400 animate-ping"></span>
+                            PSA 2D 수분 확산 맵
+                        </span>
+                        <span id="txtD_PSA" class="text-[10px] bg-rose-950/60 border border-rose-500/30 text-rose-300 px-2 py-0.5 rounded code-font">D ≈ 0.225 mm²/h</span>
+                    </div>
+                    
+                    <div class="relative bg-slate-950 p-2 rounded-lg border border-slate-800 w-full flex justify-center items-center">
+                        <canvas id="canvasPSA" width="220" height="220" class="cursor-crosshair rounded border border-slate-800"></canvas>
+                        <!-- Glass Top/Bottom Seal Badges -->
+                        <div class="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-slate-700 text-[8px] text-slate-400 px-2 py-0.5 rounded shadow">
+                            [상부 Glass 차단]
+                        </div>
+                        <div class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-slate-700 text-[8px] text-slate-400 px-2 py-0.5 rounded shadow">
+                            [하부 Glass 차단]
+                        </div>
+                    </div>
+                    <div id="tooltipPSA" class="text-[10px] text-slate-300 mt-2 h-4 code-font text-center">
+                        마우스를 올리면 좌표별 농도가 표시됩니다.
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Color Scale Bar -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 flex items-center justify-between text-[10px] text-slate-400">
+                <span class="font-bold text-cyan-400">건조 영역 (0% RH)</span>
+                <div class="h-2.5 flex-1 mx-4 rounded-full bg-gradient-to-r from-slate-950 via-cyan-600 via-amber-500 to-rose-600 border border-slate-800"></div>
+                <span id="txtColorMax" class="font-bold text-rose-400">85% RH 포화 수분 (100%)</span>
+            </div>
+
+            <!-- Charts Container -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
+                    <h3 class="text-xs font-bold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="line-chart" class="w-4 h-4 text-cyan-400"></i>
+                        수분 확산 및 침투 속도 정밀 분석 그래프
+                    </h3>
+                    <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800 text-[10px]">
+                        <button id="btnTabCenter" class="px-2.5 py-1 rounded font-bold bg-slate-800 text-white">중앙 농도 추이</button>
+                        <button id="btnTabCross" class="px-2.5 py-1 rounded font-bold text-slate-400 hover:text-white">가로 단면 프로파일</button>
+                        <button id="btnTabDepth" class="px-2.5 py-1 rounded font-bold text-slate-400 hover:text-white">침투 깊이 (kinetics)</button>
+                    </div>
+                </div>
+
+                <div class="h-[230px] w-full">
+                    <canvas id="chartMain"></canvas>
+                </div>
+            </div>
+
+            <!-- Analysis & Diagnostics Summary -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl text-xs space-y-2.5">
+                <h3 class="font-bold text-slate-200 flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <i data-lucide="file-text" class="w-4 h-4 text-amber-400"></i>
+                    시뮬레이션 실시간 진단 및 신뢰성 평가 해설
+                </h3>
+                <p id="txtDiagnosticMsg" class="text-slate-300 leading-relaxed">
+                    시뮬레이션 초기 상태입니다. 슬라이더 및 환경 파라미터를 변경하고 실행하여 확산 거동을 분석하세요.
+                </p>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 bg-slate-900 py-4 px-6 text-center text-xs text-slate-500 mt-6 flex justify-between items-center max-w-7xl w-full mx-auto">
+        <p>&copy; Adhesive Reliability & Optical Materials Lab. All rights reserved.</p>
+        <p class="code-font">v5.0.0 [Parametric 2D Moisture Solver with Arrhenius Kinetics]</p>
+    </footer>
+
+    <!-- Logic Script -->
+    <script>
+        lucide.createIcons();
+
+        // 2D Grid Resolution for calculation & rendering
+        const GRID_N = 31; // 31x31 grid points
+        
+        // Physical Constants and Dynamic Defaults
+        let ocaWvtr = 700;       // g/m^2*day (at 85C, 85%RH, 100um)
+        let psaWvtr = 3500;      // g/m^2*day (at 85C, 85%RH, 100um)
+        let specimenL = 10;      // mm (2mm to 100mm)
+        let thickness = 100;     // um (10um to 500um)
+        let tempC = 85;          // Celsius (20 to 95)
+        let humidityRH = 85;     // % RH (10 to 100)
+
+        let simTimeHours = 0;    // Hours
+        let playbackSpeed = 1;   // 1x, 10x, 50x, 200x
+        
+        let playInterval = null;
+        let activeTab = 'center'; // 'center', 'cross', 'depth'
+        let chartInstance = null;
+
+        // UI Selectors
+        const sliderOcaWvtr = document.getElementById('sliderOcaWvtr');
+        const txtOcaWvtr = document.getElementById('txtOcaWvtr');
+        const sliderPsaWvtr = document.getElementById('sliderPsaWvtr');
+        const txtPsaWvtr = document.getElementById('txtPsaWvtr');
+        const sliderSpecimenSize = document.getElementById('sliderSpecimenSize');
+        const txtSpecimenSize = document.getElementById('txtSpecimenSize');
+        const sliderThickness = document.getElementById('sliderThickness');
+        const txtThickness = document.getElementById('txtThickness');
+        const sliderTemp = document.getElementById('sliderTemp');
+        const txtTemp = document.getElementById('txtTemp');
+        const sliderHumidity = document.getElementById('sliderHumidity');
+        const txtHumidity = document.getElementById('txtHumidity');
+
+        const badgeEnv = document.getElementById('badgeEnv');
+        const badgeSpecimen = document.getElementById('badgeSpecimen');
+
+        const sliderSimTime = document.getElementById('sliderSimTime');
+        const txtSimTime = document.getElementById('txtSimTime');
+        
+        const btnPlay = document.getElementById('btnPlay');
+        const btnReset = document.getElementById('btnReset');
+        const btnSpeed1 = document.getElementById('btnSpeed1');
+        const btnSpeed10 = document.getElementById('btnSpeed10');
+        const btnSpeed50 = document.getElementById('btnSpeed50');
+        const btnSpeed200 = document.getElementById('btnSpeed200');
+
+        const txtD_OCA = document.getElementById('txtD_OCA');
+        const txtD_PSA = document.getElementById('txtD_PSA');
+        const txtColorMax = document.getElementById('txtColorMax');
+
+        const statOcaCenter = document.getElementById('statOcaCenter');
+        const statOcaDepth = document.getElementById('statOcaDepth');
+        const statPsaCenter = document.getElementById('statPsaCenter');
+        const statPsaDepth = document.getElementById('statPsaDepth');
+        const txtDiagnosticMsg = document.getElementById('txtDiagnosticMsg');
+
+        const btnTabCenter = document.getElementById('btnTabCenter');
+        const btnTabCross = document.getElementById('btnTabCross');
+        const btnTabDepth = document.getElementById('btnTabDepth');
+
+        const canvasOCA = document.getElementById('canvasOCA');
+        const canvasPSA = document.getElementById('canvasPSA');
+        const ctxOCA = canvasOCA.getContext('2d');
+        const ctxPSA = canvasPSA.getContext('2d');
+        const tooltipOCA = document.getElementById('tooltipOCA');
+        const tooltipPSA = document.getElementById('tooltipPSA');
+
+        // Calculate Effective Diffusion Coefficient D (mm^2/hour) taking into account:
+        // 1. Base WVTR at 8585 (100um reference)
+        // 2. Temperature scaling via Arrhenius relation (Ea ~ 35 kJ/mol)
+        // 3. Adhesive Layer Thickness d (um)
+        function calcDiffusionCoeff(wvtrBaseVal) {
+            const refTempK = 358.15; // 85 degC in Kelvin
+            const currentTempK = tempC + 273.15;
+            const Ea_R = 4200.0; // Ea/R in Kelvin (~35 kJ/mol)
+
+            // Temperature Arrhenius Factor
+            const tempArrheniusFactor = Math.exp(-Ea_R * ((1.0 / currentTempK) - (1.0 / refTempK)));
+
+            // Base D at 8585 for 100um: D_ref = 0.045 * (wvtrBase / 700)
+            const refD_100um = 0.045 * (wvtrBaseVal / 700.0);
+
+            // Thickness scaling: D_effective = D_ref * (d / 100um) * ArrheniusFactor
+            // As thickness increases, lateral diffusion path cross-section scales
+            const thickRatio = thickness / 100.0;
+            const effectiveD = refD_100um * thickRatio * tempArrheniusFactor;
+
+            return Math.max(0.00001, effectiveD);
+        }
+
+        // 1D Analytical Diffusion Solution with 2-sided border saturation C = (HumidityRH %)
+        // u1D(x, t) returns normalized concentration [0.0 ~ 1.0] (multiplied later by RH)
+        function calc1DConcentration(x, L, t, D) {
+            if (t <= 0) return 0;
+            
+            let sum = 0;
+            const terms = 15;
+            for (let m = 0; m < terms; m++) {
+                const n = 2 * m + 1;
+                const lambda = (n * Math.PI) / L;
+                const sinTerm = Math.sin(lambda * x);
+                const expTerm = Math.exp(-D * lambda * lambda * t);
+                sum += (1 / n) * sinTerm * expTerm;
+            }
+            const u = 1 - (4 / Math.PI) * sum;
+            return Math.max(0, Math.min(1.0, u));
+        }
+
+        // 2D Concentration calculation using Product solution:
+        // C_2D(x, y, t) = [1 - (1 - C_1D(x, t)) * (1 - C_1D(y, t))] * (humidityRH / 100)
+        function calc2DConcentration(x, y, L, t, D) {
+            const ambientLevel = humidityRH / 100.0;
+            if (t <= 0) return 0;
+            if (x <= 0 || x >= L || y <= 0 || y >= L) return ambientLevel;
+
+            const c1X = calc1DConcentration(x, L, t, D);
+            const c1Y = calc1DConcentration(y, L, t, D);
+
+            const c2D_norm = 1.0 - (1.0 - c1X) * (1.0 - c1Y);
+            return Math.max(0, Math.min(ambientLevel, c2D_norm * ambientLevel));
+        }
+
+        // Calculate moisture penetration front depth (distance from edge in mm where C >= 10% of ambient RH)
+        function calcPenetrationDepth(L, t, D) {
+            if (t <= 0) return 0;
+            const ambientLevel = humidityRH / 100.0;
+            const threshold = 0.10 * ambientLevel;
+            const step = Math.max(0.01, L / 500); // Dynamic scanning step for up to 100mm
+            
+            for (let x = 0; x <= L / 2; x += step) {
+                const c = calc2DConcentration(x, L / 2, L, t, D);
+                if (c < threshold) {
+                    return x; // Depth in mm
+                }
+            }
+            return L / 2; // Fully saturated to center
+        }
+
+        // Render 2D Heatmap onto Canvas
+        function drawCanvas2D(ctx, canvasElem, wvtrVal) {
+            const width = canvasElem.width;
+            const height = canvasElem.height;
+            const D = calcDiffusionCoeff(wvtrVal);
+            const ambientLevel = humidityRH / 100.0;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const cellSize = width / GRID_N;
+
+            for (let gy = 0; gy < GRID_N; gy++) {
+                for (let gx = 0; gx < GRID_N; gx++) {
+                    const posX = (gx / (GRID_N - 1)) * specimenL;
+                    const posY = (gy / (GRID_N - 1)) * specimenL;
+
+                    const conc = calc2DConcentration(posX, posY, specimenL, simTimeHours, D);
+                    const normConc = ambientLevel > 0 ? (conc / ambientLevel) : 0; // Relative to current humidity
+
+                    // Color Mapping:
+                    // 0.0 -> Dark Slate rgb(15, 23, 42)
+                    // 0.3 -> Cyan rgb(6, 182, 212)
+                    // 0.7 -> Amber rgb(245, 158, 11)
+                    // 1.0 -> Saturated Rose rgb(225, 29, 72)
+                    let r, g, b;
+                    if (normConc < 0.3) {
+                        const ratio = normConc / 0.3;
+                        r = Math.round(15 + (6 - 15) * ratio);
+                        g = Math.round(23 + (182 - 23) * ratio);
+                        b = Math.round(42 + (212 - 42) * ratio);
+                    } else if (normConc < 0.7) {
+                        const ratio = (normConc - 0.3) / 0.4;
+                        r = Math.round(6 + (245 - 6) * ratio);
+                        g = Math.round(182 + (158 - 182) * ratio);
+                        b = Math.round(212 + (11 - 212) * ratio);
+                    } else {
+                        const ratio = (normConc - 0.7) / 0.3;
+                        r = Math.round(245 + (225 - 245) * ratio);
+                        g = Math.round(158 + (29 - 158) * ratio);
+                        b = Math.round(11 + (72 - 11) * ratio);
+                    }
+
+                    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                    ctx.fillRect(gx * cellSize, gy * cellSize, cellSize + 0.5, cellSize + 0.5);
+                }
+            }
+
+            // Draw Contour Front Lines (Conc = 10% depth)
+            const depth10 = calcPenetrationDepth(specimenL, simTimeHours, D);
+            const normDepth = (depth10 / specimenL) * width;
+
+            if (normDepth > 0 && normDepth < width / 2) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+                ctx.setLineDash([3, 3]);
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(normDepth, normDepth, width - 2 * normDepth, height - 2 * normDepth);
+                ctx.setLineDash([]);
+            }
+        }
+
+        // Attach Mouse Interactive Probe to Canvas
+        function setupCanvasHover(canvasElem, tooltipElem, wvtrVal) {
+            canvasElem.onmousemove = (e) => {
+                const rect = canvasElem.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const posX = (x / rect.width) * specimenL;
+                const posY = (y / rect.height) * specimenL;
+
+                const D = calcDiffusionCoeff(wvtrVal);
+                const conc = calc2DConcentration(posX, posY, specimenL, simTimeHours, D);
+                const edgeDist = Math.min(posX, specimenL - posX, posY, specimenL - posY);
+
+                tooltipElem.innerHTML = `위치: (${posX.toFixed(1)}mm, ${posY.toFixed(1)}mm) | <strong>수분농도: ${(conc * 100).toFixed(1)}% RH</strong> | 측면거리: ${edgeDist.toFixed(2)}mm`;
+            };
+
+            canvasElem.onmouseleave = () => {
+                tooltipElem.innerHTML = '마우스를 올리면 좌표별 농도가 표시됩니다.';
+            };
+        }
+
+        // Render Chart.js Plots
+        function renderChart() {
+            const ctx = document.getElementById('chartMain').getContext('2d');
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const dOca = calcDiffusionCoeff(ocaWvtr);
+            const dPsa = calcDiffusionCoeff(psaWvtr);
+
+            if (activeTab === 'center') {
+                const timeLabels = [];
+                const ocaCenterData = [];
+                const psaCenterData = [];
+
+                for (let t = 0; t <= 1000; t += 20) {
+                    timeLabels.push(`${t}h`);
+                    const cOca = calc2DConcentration(specimenL / 2, specimenL / 2, specimenL, t, dOca);
+                    const cPsa = calc2DConcentration(specimenL / 2, specimenL / 2, specimenL, t, dPsa);
+                    ocaCenterData.push((cOca * 100).toFixed(2));
+                    psaCenterData.push((cPsa * 100).toFixed(2));
+                }
+
+                chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: timeLabels,
+                        datasets: [
+                            {
+                                label: 'OCA 중앙 수분농도 (% RH)',
+                                data: ocaCenterData,
+                                borderColor: '#22d3ee',
+                                backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                                borderWidth: 2.5,
+                                fill: true,
+                                tension: 0.2
+                            },
+                            {
+                                label: 'PSA 중앙 수분농도 (% RH)',
+                                data: psaCenterData,
+                                borderColor: '#fb7185',
+                                backgroundColor: 'rgba(251, 113, 133, 0.1)',
+                                borderWidth: 2.5,
+                                fill: true,
+                                tension: 0.2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#94a3b8', font: { family: 'Noto Sans KR', size: 10 } } }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: 'rgba(51, 65, 85, 0.2)' },
+                                ticks: { color: '#94a3b8', font: { size: 9 } },
+                                title: { display: true, text: '신뢰성 노출 시간 (Hours)', color: '#94a3b8', font: { size: 10 } }
+                            },
+                            y: {
+                                min: 0,
+                                max: Math.min(100, Math.ceil(humidityRH / 10) * 10 + 5),
+                                grid: { color: 'rgba(51, 65, 85, 0.4)' },
+                                ticks: { color: '#94a3b8', font: { size: 9 } },
+                                title: { display: true, text: '중앙점 수분 농도 (% RH)', color: '#94a3b8', font: { size: 10 } }
+                            }
+                        }
+                    }
+                });
+
+            } else if (activeTab === 'cross') {
+                const posLabels = [];
+                const ocaCrossData = [];
+                const psaCrossData = [];
+
+                const points = 40;
+                for (let i = 0; i <= points; i++) {
+                    const x = (i / points) * specimenL;
+                    posLabels.push(`${x.toFixed(1)}mm`);
+                    
+                    const cOca = calc2DConcentration(x, specimenL / 2, specimenL, simTimeHours, dOca);
+                    const cPsa = calc2DConcentration(x, specimenL / 2, specimenL, simTimeHours, dPsa);
+                    
+                    ocaCrossData.push((cOca * 100).toFixed(2));
+                    psaCrossData.push((cPsa * 100).toFixed(2));
+                }
+
+                chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: posLabels,
+                        datasets: [
+                            {
+                                label: 'OCA 가로 단면 수분농도 (% RH)',
+                                data: ocaCrossData,
+                                borderColor: '#22d3ee',
+                                borderWidth: 2.5,
+                                fill: false,
+                                tension: 0.2
+                            },
+                            {
+                                label: 'PSA 가로 단면 수분농도 (% RH)',
+                                data: psaCrossData,
+                                borderColor: '#fb7185',
+                                borderWidth: 2.5,
+                                fill: false,
+                                tension: 0.2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#94a3b8', font: { family: 'Noto Sans KR', size: 10 } } }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: 'rgba(51, 65, 85, 0.2)' },
+                                ticks: { color: '#94a3b8', font: { size: 9 } },
+                                title: { display: true, text: '시편 가로 위치 (0mm ↔ L mm)', color: '#94a3b8', font: { size: 10 } }
+                            },
+                            y: {
+                                min: 0,
+                                max: Math.min(100, Math.ceil(humidityRH / 10) * 10 + 5),
+                                grid: { color: 'rgba(51, 65, 85, 0.4)' },
+                                ticks: { color: '#94a3b8', font: { size: 9 } },
+                                title: { display: true, text: '수분 농도 (% RH)', color: '#94a3b8', font: { size: 10 } }
+                            }
+                        }
+                    }
+                });
+
+            } else {
+                const timeLabels = [];
+                const ocaDepthData = [];
+                const psaDepthData = [];
+
+                for (let t = 0; t <= 1000; t += 20) {
+                    timeLabels.push(`${t}h`);
+                    const depOca = calcPenetrationDepth(specimenL, t, dOca);
+                    const depPsa = calcPenetrationDepth(specimenL, t, dPsa);
+                    ocaDepthData.push(depOca.toFixed(3));
+                    psaDepthData.push(depPsa.toFixed(3));
+                }
+
+                chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: timeLabels,
+                        datasets: [
+                            {
+                                label: 'OCA 수분 침투 깊이 (mm)',
+                                data: ocaDepthData,
+                                borderColor: '#22d3ee',
+                                borderWidth: 2.5,
+                                fill: false,
+                                tension: 0.2
+                            },
+                            {
+                                label: 'PSA 수분 침투 깊이 (mm)',
+                                data: psaDepthData,
+                                borderColor: '#fb7185',
+                                borderWidth: 2.5,
+                                fill: false,
+                                tension: 0.2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#94a3b8', font: { family: 'Noto Sans KR', size: 10 } } }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: 'rgba(51, 65, 85, 0.2)' },
+                                ticks: { color: '#94a3b8', font: { size: 9 } },
+                                title: { display: true, text: '신뢰성 노출 시간 (Hours)', color: '#94a3b8', font: { size: 10 } }
+                            },
+                            y: {
+                                min: 0,
+                                max: specimenL / 2,
+                                grid: { color: 'rgba(51, 65, 85, 0.4)' },
+                                ticks: { color: '#94a3b8', font: { size: 9 } },
+                                title: { display: true, text: '측면 수분 침투 깊이 (mm)', color: '#94a3b8', font: { size: 10 } }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Master UI Refresh Loop
+        function updateUI() {
+            txtOcaWvtr.textContent = `${ocaWvtr} g/m²·day`;
+            txtPsaWvtr.textContent = `${psaWvtr} g/m²·day`;
+            txtSpecimenSize.textContent = `${specimenL} mm x ${specimenL} mm`;
+            txtThickness.textContent = `${thickness} \u03BCm`;
+            txtTemp.textContent = `${tempC} °C`;
+            txtHumidity.textContent = `${humidityRH} % RH`;
+
+            badgeEnv.textContent = `시험 조건: ${tempC}°C / ${humidityRH}% RH`;
+            badgeSpecimen.textContent = `두께: ${thickness} \u03BCm | 크기: ${specimenL}x${specimenL} mm`;
+
+            txtSimTime.textContent = `${simTimeHours.toFixed(1)} 시간 (${(simTimeHours / 24).toFixed(1)} 일차)`;
+            sliderSimTime.value = simTimeHours;
+
+            const dOca = calcDiffusionCoeff(ocaWvtr);
+            const dPsa = calcDiffusionCoeff(psaWvtr);
+
+            txtD_OCA.textContent = `D ≈ ${dOca.toFixed(4)} mm²/h`;
+            txtD_PSA.textContent = `D ≈ ${dPsa.toFixed(4)} mm²/h`;
+            txtColorMax.textContent = `${humidityRH}% RH 포화 수분 (100%)`;
+
+            // Compute center point concentrations
+            const cOcaCenter = calc2DConcentration(specimenL / 2, specimenL / 2, specimenL, simTimeHours, dOca);
+            const cPsaCenter = calc2DConcentration(specimenL / 2, specimenL / 2, specimenL, simTimeHours, dPsa);
+
+            // Compute penetration depths
+            const depthOca = calcPenetrationDepth(specimenL, simTimeHours, dOca);
+            const depthPsa = calcPenetrationDepth(specimenL, simTimeHours, dPsa);
+
+            // Update Status Cards
+            statOcaCenter.textContent = `${(cOcaCenter * 100).toFixed(1)}%`;
+            statOcaDepth.textContent = `${depthOca.toFixed(2)} mm`;
+            statPsaCenter.textContent = `${(cPsaCenter * 100).toFixed(1)}%`;
+            statPsaDepth.textContent = `${depthPsa.toFixed(2)} mm`;
+
+            // Draw 2D Heatmaps
+            drawCanvas2D(ctxOCA, canvasOCA, ocaWvtr);
+            drawCanvas2D(ctxPSA, canvasPSA, psaWvtr);
+
+            // Setup hover tooltip calculations
+            setupCanvasHover(canvasOCA, tooltipOCA, ocaWvtr);
+            setupCanvasHover(canvasPSA, tooltipPSA, psaWvtr);
+
+            // Update Diagnostic Msg
+            let diagMsg = "";
+            if (simTimeHours === 0) {
+                diagMsg = `${tempC}°C / ${humidityRH}% RH 조건 초기 상태입니다. 슬라이더 또는 재생 버튼을 이용해 시간에 따른 수분 전파 효과를 확인하세요.`;
+            } else if (cPsaCenter > 0.05 * (humidityRH / 100) && cOcaCenter < 0.01 * (humidityRH / 100)) {
+                diagMsg = `<strong>PSA 측면 투습 우세 구간!</strong> PSA(D ≈ ${dPsa.toFixed(4)} mm²/h)는 침투 속도가 빨라 노출 ${simTimeHours.toFixed(0)}시간 만에 시편 중심부까지 수분이 도달(${(cPsaCenter * 100).toFixed(1)}%)한 반면, OCA는 중심부 농도가 ${(cOcaCenter * 100).toFixed(1)}%로 우수한 차단 성능을 보입니다.`;
+            } else if (cPsaCenter > 0.8 * (humidityRH / 100) && cOcaCenter > 0.5 * (humidityRH / 100)) {
+                diagMsg = `<strong>장기 방치 수분 포화 구간:</strong> 시편 크기 ${specimenL}mm x ${specimenL}mm 조건에서, PSA는 중심부 수분 포화도에 거의 도달(${(cPsaCenter * 100).toFixed(1)}% RH)하였으며 OCA 또한 중심부로 수분이 포화 진입(${(cOcaCenter * 100).toFixed(1)}% RH)하고 있습니다.`;
+            } else {
+                diagMsg = `현재 노출 ${simTimeHours.toFixed(1)}시간 경과 시점 (${tempC}°C, ${humidityRH}% RH), PSA의 침투 깊이(${depthPsa.toFixed(2)}mm)가 OCA(${depthOca.toFixed(2)}mm) 대비 약 <strong>${(depthPsa / Math.max(0.01, depthOca)).toFixed(1)}배</strong> 더 깊게 진입했습니다.`;
+            }
+            txtDiagnosticMsg.innerHTML = diagMsg;
+
+            // Render active chart
+            renderChart();
+        }
+
+        // Event Listeners Setup
+        sliderOcaWvtr.addEventListener('input', (e) => {
+            ocaWvtr = parseFloat(e.target.value);
+            updateUI();
+        });
+
+        sliderPsaWvtr.addEventListener('input', (e) => {
+            psaWvtr = parseFloat(e.target.value);
+            updateUI();
+        });
+
+        sliderSpecimenSize.addEventListener('input', (e) => {
+            specimenL = parseFloat(e.target.value);
+            updateUI();
+        });
+
+        sliderThickness.addEventListener('input', (e) => {
+            thickness = parseFloat(e.target.value);
+            updateUI();
+        });
+
+        sliderTemp.addEventListener('input', (e) => {
+            tempC = parseFloat(e.target.value);
+            updateUI();
+        });
+
+        sliderHumidity.addEventListener('input', (e) => {
+            humidityRH = parseFloat(e.target.value);
+            updateUI();
+        });
+
+        sliderSimTime.addEventListener('input', (e) => {
+            simTimeHours = parseFloat(e.target.value);
+            updateUI();
+        });
+
+        // Tabs Toggle
+        btnTabCenter.addEventListener('click', () => {
+            activeTab = 'center';
+            btnTabCenter.className = "px-2.5 py-1 rounded font-bold bg-slate-800 text-white";
+            btnTabCross.className = "px-2.5 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnTabDepth.className = "px-2.5 py-1 rounded font-bold text-slate-400 hover:text-white";
+            updateUI();
+        });
+
+        btnTabCross.addEventListener('click', () => {
+            activeTab = 'cross';
+            btnTabCross.className = "px-2.5 py-1 rounded font-bold bg-slate-800 text-white";
+            btnTabCenter.className = "px-2.5 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnTabDepth.className = "px-2.5 py-1 rounded font-bold text-slate-400 hover:text-white";
+            updateUI();
+        });
+
+        btnTabDepth.addEventListener('click', () => {
+            activeTab = 'depth';
+            btnTabDepth.className = "px-2.5 py-1 rounded font-bold bg-slate-800 text-white";
+            btnTabCenter.className = "px-2.5 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnTabCross.className = "px-2.5 py-1 rounded font-bold text-slate-400 hover:text-white";
+            updateUI();
+        });
+
+        // Speed Multipliers
+        btnSpeed1.addEventListener('click', () => {
+            playbackSpeed = 1;
+            btnSpeed1.className = "px-2 py-1 rounded font-bold bg-slate-800 text-white";
+            btnSpeed10.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnSpeed50.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnSpeed200.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+        });
+
+        btnSpeed10.addEventListener('click', () => {
+            playbackSpeed = 10;
+            btnSpeed10.className = "px-2 py-1 rounded font-bold bg-slate-800 text-white";
+            btnSpeed1.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnSpeed50.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnSpeed200.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+        });
+
+        btnSpeed50.addEventListener('click', () => {
+            playbackSpeed = 50;
+            btnSpeed50.className = "px-2 py-1 rounded font-bold bg-slate-800 text-white";
+            btnSpeed1.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnSpeed10.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnSpeed200.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+        });
+
+        btnSpeed200.addEventListener('click', () => {
+            playbackSpeed = 200;
+            btnSpeed200.className = "px-2 py-1 rounded font-bold bg-slate-800 text-white";
+            btnSpeed1.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnSpeed10.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+            btnSpeed50.className = "px-2 py-1 rounded font-bold text-slate-400 hover:text-white";
+        });
+
+        // Playback Control
+        btnPlay.addEventListener('click', () => {
+            if (playInterval) {
+                clearInterval(playInterval);
+                playInterval = null;
+                btnPlay.innerHTML = '<i data-lucide="play" class="w-5 h-5 fill-slate-950"></i>';
+            } else {
+                if (simTimeHours >= 1000) simTimeHours = 0;
+                btnPlay.innerHTML = '<i data-lucide="pause" class="w-5 h-5 fill-slate-950"></i>';
+                playInterval = setInterval(() => {
+                    simTimeHours += 1.0 * playbackSpeed;
+                    if (simTimeHours >= 1000) {
+                        simTimeHours = 1000;
+                        clearInterval(playInterval);
+                        playInterval = null;
+                        btnPlay.innerHTML = '<i data-lucide="play" class="w-5 h-5 fill-slate-950"></i>';
+                    }
+                    updateUI();
+                }, 80);
+            }
+            lucide.createIcons();
+        });
+
+        btnReset.addEventListener('click', () => {
+            if (playInterval) {
+                clearInterval(playInterval);
+                playInterval = null;
+                btnPlay.innerHTML = '<i data-lucide="play" class="w-5 h-5 fill-slate-950"></i>';
+                lucide.createIcons();
+            }
+            simTimeHours = 0;
+            updateUI();
+        });
+
+        // Window Load & Resize handlers
+        window.onload = function () {
+            updateUI();
+        };
+
+        window.onresize = function () {
+            updateUI();
+        };
+    </script>
+</body>
+</html>
 
